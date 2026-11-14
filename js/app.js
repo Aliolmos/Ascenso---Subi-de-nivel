@@ -64,6 +64,12 @@ const DEF = () => ({
   notes: [],
   pomos: [],
   badges: {},
+  cards: [
+    { id: "mp", name: "Mercado Pago", color: "#00b1ea", due: 10 },
+    { id: "nx", name: "Naranja X", color: "#ff6200", due: 10 },
+  ],
+  cc: [],
+  ccpay: [],
 });
 
 let user = null,
@@ -217,7 +223,8 @@ const CATS = {
     /resto|restaur|\bbar\b|caf[eé]|delivery|pedidos|rappi|pizza|birra|helad|comida|burger|sushi/,
   ],
   Transporte: ["🚗", /uber|nafta|colectivo|bondi|sube|taxi|cabify|didi|tren|peaje|estacion|auto|moto/],
-  Servicios: ["💡", /\bluz\b|\bgas\b|agua|internet|celu|alquiler|expensa|factura|wifi|abono|tarjeta/],
+  Servicios: ["💡", /\bluz\b|\bgas\b|agua|internet|celu|alquiler|expensa|factura|wifi|abono/],
+  Tarjetas: ["💳", /tarjeta|resumen|naranja|visa|master/],
   Ocio: ["🎮", /cine|netflix|spotify|salida|juego|steam|disney|boliche|recital|entrada|youtube/],
   Salud: ["💊", /farmacia|m[eé]dic|gym|gimnasio|dentista|obra social|prepaga|remedio/],
   Compras: ["🛍️", /ropa|zapa|mercadolibre|meli|compr[eé]|shein|regalo|amazon/],
@@ -257,6 +264,101 @@ function parseTx(t, cat) {
 }
 const monthTx = (ym) => S.tx.filter((t) => t.d.startsWith(ym));
 const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
+
+/* ---------- tarjetas de crédito ---------- */
+const CC_COLORS = ["#8a7cff", "#4be3ac", "#ffc145", "#ff3d7f", "#3dc2ff"];
+const ymNow = () => dk().slice(0, 7);
+const ymAdd = (ym, n) => {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1);
+};
+const ymName = (ym) =>
+  MESES_L[+ym.slice(5) - 1] + (ym.slice(0, 4) === ymNow().slice(0, 4) ? "" : " " + ym.slice(0, 4));
+const cuotaEn = (p, ym) => {
+  for (let k = 0; k < p.n; k++) if (ymAdd(p.m, k) === ym) return p.amt / p.n;
+  return 0;
+};
+// cuántas cuotas de una compra ya vencieron (incluida la de este mes)
+const cuotasVencidas = (p) => {
+  let x = 0;
+  for (let k = 0; k < p.n; k++) if (ymAdd(p.m, k) <= ymNow()) x++;
+  return x;
+};
+function cardInfo(c) {
+  const ym = ymNow(),
+    ps = S.cc.filter((p) => p.card === c.id),
+    pays = S.ccpay.filter((x) => x.card === c.id),
+    pagado = sum(pays, (x) => x.amt),
+    hasta = sum(ps, (p) => (p.amt / p.n) * cuotasVencidas(p)),
+    total = Math.max(0, sum(ps, (p) => p.amt) - pagado),
+    mes = Math.max(0, hasta - pagado),
+    adelanto = Math.max(0, pagado - hasta),
+    prox = Math.max(0, sum(ps, (p) => cuotaEn(p, ymAdd(ym, 1))) - adelanto),
+    days = c.due - new Date().getDate();
+  return { ps, pays, total, mes, prox, days, late: mes > 0 && days < 0 };
+}
+function cardAlert() {
+  for (const c of S.cards) {
+    const i = cardInfo(c);
+    if (i.mes > 0 && i.days <= 3)
+      return `Tu tarjeta ${esc(c.name)} ${i.late ? "está vencida" : i.days === 0 ? "vence hoy" : "vence en " + i.days + (i.days === 1 ? " día" : " días")}: ${money(i.mes)} 💳`;
+  }
+  return null;
+}
+function cardsHTML() {
+  const ym = ymNow(),
+    infos = S.cards.map((c) => [c, cardInfo(c)]),
+    all = sum(infos, ([, i]) => i.total),
+    mesAll = sum(infos, ([, i]) => i.mes);
+  return `<div class="card" style="margin-top:16px">
+  <h3 class="cch">Tarjetas de crédito <span class="row wrap" style="gap:6px"><span class="pill">Este mes ${money(mesAll)}</span><span class="pill a">Debés ${money(all)}</span></span></h3>
+  <div class="grid g2">${infos
+    .map(([c, i]) => {
+      const activas = i.ps.filter(
+        (p) => ymAdd(p.m, p.n - 1) > ym || (ymAdd(p.m, p.n - 1) === ym && i.mes > 0),
+      );
+      const last = i.pays[i.pays.length - 1];
+      return `<div class="cc" style="--cc:${c.color}">
+      <div class="row between"><div class="row" style="gap:8px"><span class="ccdot"></span><b>${esc(c.name)}</b></div>
+      <div class="row" style="gap:4px"><label class="sm mu">vence el</label><input class="ccdue" data-id="${c.id}" type="number" min="1" max="31" value="${c.due}"><button class="x" data-a="delcard" data-id="${c.id}" title="Eliminar tarjeta">×</button></div></div>
+      <div class="row between" style="margin-top:12px;align-items:flex-end">
+        <div><div class="lbl">A pagar en ${ymName(ym)}</div><div class="big">${money(i.mes)}</div>
+        <div class="sm ${i.late ? "bad" : i.mes && i.days <= 3 ? "acc" : "mu"}">${i.mes ? (i.late ? "Vencida desde el " + c.due : i.days === 0 ? "Vence hoy" : "Vence en " + i.days + (i.days === 1 ? " día" : " días")) : "✓ Al día"}</div></div>
+        <div style="text-align:right"><div class="lbl">Deuda total</div><div class="num" style="font-size:18px">${money(i.total)}</div><div class="sm mu">En ${ymName(ymAdd(ym, 1))}: ${money(i.prox)}</div></div>
+      </div>
+      ${i.mes ? `<form class="row" data-f="ccpay" data-id="${c.id}" style="margin-top:12px"><input name="v" type="number" min="1" step="any" value="${Math.round(i.mes)}"><button class="btn sm">Registrar pago</button></form>` : ""}
+      ${last ? `<div class="row between sm mu" style="margin-top:10px"><span>Último pago: ${money(last.amt)} el ${fromKey(last.d).getDate()} ${MESES[fromKey(last.d).getMonth()]}</span><button class="x" style="font-size:13px" data-a="delpay" data-id="${last.id}">deshacer</button></div>` : ""}
+      ${
+        activas.length
+          ? `<div class="list" style="margin-top:12px">${activas
+              .map((p) => {
+                const v = cuotasVencidas(p);
+                return `<div class="ccrow"><div style="flex:1;min-width:0"><b>${esc(p.desc)}</b><div class="sm mu">${p.n > 1 ? (v ? "Cuota " + Math.min(v, p.n) + " de " + p.n : p.n + " cuotas, arranca en " + ymName(p.m)) + " · termina en " + ymName(ymAdd(p.m, p.n - 1)) : v ? "Un pago" : "Un pago en " + ymName(p.m)}</div></div><b class="num">${money(p.amt / p.n)}${p.n > 1 ? '<span class="sm mu">/mes</span>' : ""}</b><button class="x" data-a="delcc" data-id="${p.id}">×</button></div>`;
+              })
+              .join("")}</div>`
+          : `<p class="sm mu" style="margin-top:12px">Sin compras pendientes.</p>`
+      }
+    </div>`;
+    })
+    .join("")}</div>
+  ${
+    S.cards.length
+      ? `<form class="row wrap" data-f="ccbuy" style="margin-top:16px">
+    <select name="card" style="flex:1;min-width:140px">${S.cards.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select>
+    <input name="desc" placeholder="Qué compraste" required style="flex:2;min-width:160px">
+    <input name="amt" type="number" min="1" step="any" placeholder="Monto total $" required style="flex:1;min-width:120px">
+    <select name="n" style="flex:0 0 120px">${[1, 2, 3, 6, 9, 12, 18, 24].map((n) => `<option value="${n}">${n === 1 ? "1 pago" : n + " cuotas"}</option>`).join("")}</select>
+    <select name="w" style="flex:1;min-width:150px"><option value="0">1ª cuota: este mes</option><option value="1" selected>1ª cuota: ${ymName(ymAdd(ym, 1))}</option><option value="2">1ª cuota: ${ymName(ymAdd(ym, 2))}</option></select>
+    <button class="btn">Cargar</button></form>
+  <p class="sm mu" style="margin-top:10px">¿Ya venías pagando cuotas? Cargá solo lo que te falta: el monto restante, las cuotas que quedan y que la primera vence este mes.</p>`
+      : ""
+  }
+  <details style="margin-top:12px"><summary class="sm mu">Agregar otra tarjeta</summary>
+    <form class="row wrap" data-f="card" style="margin-top:10px"><input name="name" placeholder="Nombre (ej: Visa Galicia)" required style="flex:2;min-width:160px"><input name="due" type="number" min="1" max="31" placeholder="Día de vencimiento" required style="flex:1;min-width:140px"><button class="btn g">Agregar</button></form>
+  </details>
+</div>`;
+}
 
 /* ---------- entrenamiento ---------- */
 const EXS = [
@@ -463,8 +565,9 @@ V.inicio = () => {
     ["Anotar una idea", S.notes.some((n) => n.d === k)],
   ];
   const md = mis.filter((m) => m[1]).length;
-  let nudge;
-  if (ht && hd === ht) nudge = "Día perfecto. Así se construye una racha 💎";
+  let nudge = cardAlert();
+  if (nudge);
+  else if (ht && hd === ht) nudge = "Día perfecto. Así se construye una racha 💎";
   else if (now.getHours() >= 19 && !trained && hd < ht)
     nudge = "Hoy no terminaste tus hábitos y todavía no entrenaste. ¿Qué pasó? 👀";
   else if (ht)
@@ -607,6 +710,7 @@ V.finanzas = () => {
     <div class="card"><div class="lbl">Gastos del mes</div><div class="big">${money(out)}</div><div class="sm ${pout && out > pout ? "bad" : "mu"}">${pout ? (out > pout ? "+" : "") + Math.round(((out - pout) / pout) * 100) + "% vs mes anterior" : "sin datos del mes anterior"}</div></div>
     <div class="card"><div class="lbl">Presupuesto</div>${S.budget ? `<div class="big">${Math.round((out / S.budget) * 100)}%</div><div class="bar ${out > S.budget ? "" : ""}" style="margin-top:8px"><b style="width:${Math.min(100, (out / S.budget) * 100)}%;${out > S.budget ? "background:var(--bad)" : ""}"></b></div><div class="sm mu" style="margin-top:6px">de ${money(S.budget)}</div>` : `<p class="sm mu" style="margin-top:8px">Definí un tope mensual en <a href="#ajustes" style="color:var(--ac)">Ajustes</a>.</p>`}</div>
   </div>
+  ${cardsHTML()}
   <div class="grid g2" style="margin-top:16px;align-items:start">
     <div class="card"><h3>Últimos 6 meses <span class="row sm mu" style="gap:10px;font-weight:400"><span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--ok)"></i> Ingresos</span><span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--ac2)"></i> Gastos</span></span></h3>
       <div class="chart">${months.map((m) => `<div class="c"><div class="bs"><i style="height:${(m.i / mx) * 100}%" title="${money(m.i)}"></i><i class="o" style="height:${(m.o / mx) * 100}%" title="${money(m.o)}"></i></div><small>${m.l}</small></div>`).join("")}</div></div>
@@ -875,6 +979,24 @@ document.addEventListener("click", (e) => {
       S.habits = S.habits.filter((h) => h.id !== id);
       commit();
     });
+  if (a === "delcc") {
+    S.cc = S.cc.filter((p) => p.id !== id);
+    return commit();
+  }
+  if (a === "delpay") {
+    const p = S.ccpay.find((x) => x.id === id);
+    S.ccpay = S.ccpay.filter((x) => x.id !== id);
+    if (p) S.tx = S.tx.filter((t) => t.id !== p.tx);
+    toast("Pago deshecho");
+    return commit();
+  }
+  if (a === "delcard")
+    return ask("¿Eliminar esta tarjeta y todas sus compras?", () => {
+      S.cards = S.cards.filter((c) => c.id !== id);
+      S.cc = S.cc.filter((p) => p.card !== id);
+      S.ccpay = S.ccpay.filter((p) => p.card !== id);
+      commit();
+    });
   if (a === "deltx") {
     S.tx = S.tx.filter((t) => t.id !== id);
     return commit();
@@ -994,6 +1116,12 @@ document.addEventListener("click", (e) => {
 $("#sheet").addEventListener("click", (e) => {
   if (e.target.id === "sheet") $("#sheet").classList.remove("open");
 });
+document.addEventListener("change", (e) => {
+  if (!e.target.classList.contains("ccdue")) return;
+  const c = S.cards.find((x) => x.id === e.target.dataset.id);
+  c.due = Math.min(31, Math.max(1, +e.target.value || 1));
+  commit();
+});
 document.addEventListener("input", (e) => {
   if (e.target.id === "nq") {
     noteQ = e.target.value;
@@ -1009,6 +1137,40 @@ document.addEventListener("submit", (e) => {
   if (k === "habit") {
     S.habits.push({ id: uid(), name: v("name"), icon: v("icon") || "⭐" });
     toast("Hábito creado");
+    return commit();
+  }
+  if (k === "ccbuy") {
+    S.cc.push({
+      id: uid(),
+      card: v("card"),
+      desc: v("desc"),
+      amt: +v("amt"),
+      n: +v("n"),
+      m: ymAdd(ymNow(), +v("w")),
+      d: dk(),
+    });
+    gain(10, "Compra en tarjeta cargada");
+    return commit();
+  }
+  if (k === "ccpay") {
+    const c = S.cards.find((x) => x.id === f.dataset.id),
+      amt = +v("v"),
+      debe = cardInfo(c).mes,
+      t = { id: uid(), d: dk(), desc: "Pago tarjeta " + c.name, amt, cat: "Tarjetas", type: "out" };
+    S.tx.push(t);
+    S.ccpay.push({ id: uid(), card: c.id, amt, d: dk(), tx: t.id });
+    if (amt >= debe - 1) gain(100, c.name + " al día 💳");
+    else toast("Pago registrado: " + money(amt));
+    return commit();
+  }
+  if (k === "card") {
+    S.cards.push({
+      id: uid(),
+      name: v("name"),
+      due: Math.min(31, Math.max(1, +v("due"))),
+      color: CC_COLORS[S.cards.length % CC_COLORS.length],
+    });
+    toast("Tarjeta agregada");
     return commit();
   }
   if (k === "tx") {
