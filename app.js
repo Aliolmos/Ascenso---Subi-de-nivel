@@ -187,13 +187,14 @@ function gStreak() {
   }
   return n;
 }
-function bestStreak() {
+function bestStreak(since = "") {
   let best = 0;
   const t = new Date();
   S.habits.forEach((h) => {
     let run = 0;
     for (let i = 400; i >= 0; i--) {
-      if (isDone(dk(addDays(t, -i)), h.id)) {
+      const k = dk(addDays(t, -i));
+      if (k >= since && isDone(k, h.id)) {
         run++;
         if (run > best) best = run;
       } else run = 0;
@@ -390,32 +391,34 @@ function weekVol(off) {
   );
 }
 
-/* ---------- insignias ---------- */
+/* ---------- insignias ----------
+   Al reiniciar la experiencia se guarda una "foto" de lo que había (S.base),
+   así las insignias se vuelven a ganar solo con lo que hagas desde ese momento. */
+const counts = () => ({
+  hab: sum(Object.values(S.hlog), (o) => Object.keys(o).length),
+  pf: Object.keys(S.perfect).length,
+  sets: S.sets.length,
+  days: new Set(S.sets.map((s) => s.d)).size,
+  tx: S.tx.length,
+  goals: S.goals.filter((g) => g.done).length,
+  pomos: S.pomos.length,
+  tasks: S.tasks.filter((t) => t.col === 2).length,
+  notes: S.notes.length,
+});
+const nuevo = (k) => counts()[k] - ((S.base && S.base[k]) || 0);
 const BADGES = [
-  [
-    "h1",
-    "🌱",
-    "Primer paso",
-    "Completá tu primer hábito",
-    () => Object.values(S.hlog).some((o) => Object.keys(o).length),
-  ],
-  ["pf", "💎", "Día perfecto", "Todos los hábitos en un día", () => Object.keys(S.perfect).length > 0],
-  ["s7", "🔥", "Semana de fuego", "Racha de 7 días en un hábito", () => bestStreak() >= 7],
-  ["s30", "🌋", "Mes imparable", "Racha de 30 días en un hábito", () => bestStreak() >= 30],
-  ["w1", "🏋️", "A los fierros", "Registrá tu primer entreno", () => S.sets.length > 0],
-  [
-    "w10",
-    "🦾",
-    "Hierro constante",
-    "Entrená 10 días distintos",
-    () => new Set(S.sets.map((s) => s.d)).size >= 10,
-  ],
-  ["f1", "💸", "Ojo al peso", "Registrá tu primer movimiento", () => S.tx.length > 0],
-  ["f30", "📊", "Control total", "30 movimientos registrados", () => S.tx.length >= 30],
-  ["g1", "🎯", "Meta cumplida", "Completá una meta", () => S.goals.some((g) => g.done)],
-  ["p10", "⏱️", "Modo foco", "10 sesiones de foco", () => S.pomos.length >= 10],
-  ["t10", "✅", "Ejecutor", "10 tareas finalizadas", () => S.tasks.filter((t) => t.col === 2).length >= 10],
-  ["n10", "🧠", "Segundo cerebro", "10 notas guardadas", () => S.notes.length >= 10],
+  ["h1", "🌱", "Primer paso", "Completá tu primer hábito", () => nuevo("hab") > 0],
+  ["pf", "💎", "Día perfecto", "Todos los hábitos en un día", () => nuevo("pf") > 0],
+  ["s7", "🔥", "Semana de fuego", "Racha de 7 días en un hábito", () => bestStreak(S.since) >= 7],
+  ["s30", "🌋", "Mes imparable", "Racha de 30 días en un hábito", () => bestStreak(S.since) >= 30],
+  ["w1", "🏋️", "A los fierros", "Registrá tu primer entreno", () => nuevo("sets") > 0],
+  ["w10", "🦾", "Hierro constante", "Entrená 10 días distintos", () => nuevo("days") >= 10],
+  ["f1", "💸", "Ojo al peso", "Registrá tu primer movimiento", () => nuevo("tx") > 0],
+  ["f30", "📊", "Control total", "30 movimientos registrados", () => nuevo("tx") >= 30],
+  ["g1", "🎯", "Meta cumplida", "Completá una meta", () => nuevo("goals") > 0],
+  ["p10", "⏱️", "Modo foco", "10 sesiones de foco", () => nuevo("pomos") >= 10],
+  ["t10", "✅", "Ejecutor", "10 tareas finalizadas", () => nuevo("tasks") >= 10],
+  ["n10", "🧠", "Segundo cerebro", "10 notas guardadas", () => nuevo("notes") >= 10],
   ["l10", "⚡", "Nivel 10", "Llegá al nivel 10", () => lvl(S.xp) >= 10],
   ["l50", "👑", "Leyenda", "Llegá al nivel 50", () => lvl(S.xp) >= 50],
 ];
@@ -910,7 +913,7 @@ V.logros = () => {
   <div class="card" style="margin-top:16px"><h3>Rangos</h3><div class="ladder">${RANKS.map((x) => `<div class="${l >= x[0] ? "on" : ""} ${x === r ? "cur" : ""}"><div style="font-size:24px">${x[2]}</div><b>${x[1]}</b><div class="sm mu">Nivel ${x[0]}+</div></div>`).join("")}</div></div>
   <div class="card" style="margin-top:16px"><h3>Insignias <span class="pill a">${got}/${BADGES.length}</span></h3><div class="grid g4">${BADGES.map((b) => `<div class="badge ${S.badges[b[0]] ? "on" : ""}"><div class="e">${b[1]}</div><b>${b[2]}</b><div class="sm mu">${b[3]}</div></div>`).join("")}</div></div>
   <div class="card" style="margin-top:16px"><h3>Cómo ganar XP</h3>${earn.map((e) => `<div class="tx"><span class="t">${e[0]}</span><b class="acc num">${e[1]} XP</b></div>`).join("")}</div>
-  <p class="sm mu" style="text-align:center;margin-top:20px">¿Estabas probando? <button class="link" data-a="fresh">Empezá de cero</button> y arrancá desde el nivel 1.</p>`;
+  <p class="sm mu" style="text-align:center;margin-top:20px">¿Querés volver a arrancar? <button class="link" data-a="xpreset">Reiniciá tu experiencia</button>: volvés al nivel 1 sin perder tus datos.</p>`;
 };
 
 let showExport = false;
@@ -946,7 +949,8 @@ V.ajustes = () => `<div class="top"><div><p>Personalizá tu app</p><h1>Ajustes</
   <div class="card"><h3>Tus datos</h3><p class="sm mu">${user ? '☁️ Sesión iniciada como <b style="color:var(--tx)">' + esc(user.email) + "</b>. Tus datos se sincronizan entre todos tus dispositivos." : "💾 Modo local: se guardan solo en este navegador. Configurá Firebase para tener cuentas y sincronización."}</p>
     ${user ? '<button class="btn g" style="margin-top:12px" data-a="logout">Cerrar sesión</button>' : ""}
     <div class="row wrap" style="margin-top:12px"><button class="btn g" data-a="export">Copia de seguridad</button><button class="btn d" data-a="reset">Borrar todo</button></div>
-    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--bd)"><b>Empezar de cero</b><p class="sm mu" style="margin-top:4px">Si estabas probando la app: borra tu XP, nivel, insignias y todo lo que registraste. Quedan tus hábitos, tus tarjetas, tu nombre y tu presupuesto.</p><button class="btn g" style="margin-top:10px" data-a="fresh">Empezar de cero</button></div>
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--bd)"><b>Reiniciar experiencia</b><p class="sm mu" style="margin-top:4px">Volvés al nivel 1, con 0 XP y las insignias bloqueadas. Tus metas, hábitos, finanzas, entrenos y notas quedan como están.</p><button class="btn g" style="margin-top:10px" data-a="xpreset">Reiniciar experiencia</button></div>
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--bd)"><b>Borrar registros de prueba</b><p class="sm mu" style="margin-top:4px">Además de la experiencia, borra todo lo que registraste: movimientos, compras en tarjeta, entrenos, metas, tareas, notas y foco. Quedan tus hábitos, tus tarjetas, tu nombre y tu presupuesto.</p><button class="btn d" style="margin-top:10px" data-a="fresh">Borrar registros</button></div>
     ${showExport ? `<textarea id="exp" style="margin-top:12px;font-size:12px;min-height:120px" readonly>${esc(JSON.stringify(S))}</textarea><button class="btn sm" style="margin-top:8px" data-a="copy">Copiar</button>` : ""}
     <form data-f="import" style="margin-top:16px"><label class="sm mu">Restaurar una copia (pegá el texto)</label><textarea name="j" style="margin-top:6px;min-height:70px;font-size:12px"></textarea><button class="btn g sm" style="margin-top:8px">Restaurar</button></form>
   </div></div>`;
@@ -1138,9 +1142,23 @@ document.addEventListener("click", (e) => {
       );
     return;
   }
+  if (a === "xpreset")
+    return ask(
+      "¿Reiniciar tu experiencia? Volvés al nivel 1 y se bloquean las insignias. Tus datos quedan.",
+      () => {
+        S.xp = 0;
+        S.badges = {};
+        S.base = counts();
+        S.since = dk();
+        commit();
+        toast("Experiencia reiniciada: nivel 1 🌱");
+        go("inicio");
+      },
+      "Reiniciar",
+    );
   if (a === "fresh")
     return ask(
-      "¿Empezar de cero? Se borran tu XP, insignias y registros. Tus hábitos y tarjetas quedan.",
+      "¿Borrar todos tus registros? Se borran tu XP, insignias, movimientos, entrenos, metas, tareas y notas. Tus hábitos y tarjetas quedan.",
       () => {
         S = { ...DEF(), name: S.name, budget: S.budget, habits: S.habits, cards: S.cards };
         weekOff = 0;
@@ -1148,7 +1166,7 @@ document.addEventListener("click", (e) => {
         toast("Listo, arrancás desde el nivel 1 🌱");
         go("inicio");
       },
-      "Empezar de cero",
+      "Borrar registros",
     );
   if (a === "reset")
     return ask(

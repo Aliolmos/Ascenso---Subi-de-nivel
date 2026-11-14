@@ -1,6 +1,6 @@
 /* Service worker: guarda la app para que abra rápido y funcione sin internet.
    Cuando cambies archivos, subí el número de VERSION para que los celulares bajen la nueva. */
-const VERSION = "ascenso-v2";
+const VERSION = "ascenso-v3";
 const FILES = [
   "./",
   "./index.html",
