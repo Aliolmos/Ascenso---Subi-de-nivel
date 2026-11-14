@@ -913,9 +913,35 @@ V.logros = () => {
 };
 
 let showExport = false;
+
+/* ---------- instalar como app (PWA) ---------- */
+let installEv = null;
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installEv = e;
+  if (view === "ajustes") render();
+});
+window.addEventListener("appinstalled", () => {
+  installEv = null;
+  toast("App instalada ✓");
+  render();
+});
+if ("serviceWorker" in navigator && location.protocol !== "file:")
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+function installHTML() {
+  if (isStandalone()) return `<p class="sm mu">✓ Ya la estás usando como app instalada.</p>`;
+  if (installEv)
+    return `<p class="sm mu">Agregala a tu pantalla de inicio y abrila como cualquier app, sin barra del navegador.</p><button class="btn" style="margin-top:12px" data-a="install">Instalar Ascenso</button>`;
+  if (isIOS())
+    return `<p class="sm mu">En iPhone: abrila en Safari, tocá el botón Compartir (el cuadrado con la flecha) y elegí <b style="color:var(--tx)">Agregar a inicio</b>.</p>`;
+  return `<p class="sm mu">En Android: abrí el menú de Chrome (⋮) y tocá <b style="color:var(--tx)">Instalar app</b> o <b style="color:var(--tx)">Agregar a pantalla principal</b>.</p>`;
+}
 V.ajustes = () => `<div class="top"><div><p>Personalizá tu app</p><h1>Ajustes</h1></div></div>
   <div class="grid g2" style="align-items:start">
   <div class="card"><h3>Perfil</h3><form data-f="prefs" class="list"><label class="sm mu">Tu nombre</label><input name="name" value="${esc(S.name)}" placeholder="¿Cómo te llamo?"><label class="sm mu" style="margin-top:6px">Presupuesto mensual de gastos ($)</label><input name="budget" type="number" min="0" value="${S.budget || ""}" placeholder="Ej: 600000"><button class="btn" style="margin-top:8px;align-self:flex-start">Guardar</button></form></div>
+  <div class="card"><h3>Instalar en el celu</h3>${installHTML()}</div>
   <div class="card"><h3>Tus datos</h3><p class="sm mu">${user ? '☁️ Sesión iniciada como <b style="color:var(--tx)">' + esc(user.email) + "</b>. Tus datos se sincronizan entre todos tus dispositivos." : "💾 Modo local: se guardan solo en este navegador. Configurá Firebase para tener cuentas y sincronización."}</p>
     ${user ? '<button class="btn g" style="margin-top:12px" data-a="logout">Cerrar sesión</button>' : ""}
     <div class="row wrap" style="margin-top:12px"><button class="btn g" data-a="export">Copia de seguridad</button><button class="btn d" data-a="reset">Borrar todo</button></div>
@@ -1077,6 +1103,15 @@ document.addEventListener("click", (e) => {
     F.left = F.len;
     document.title = "Ascenso — Subí de nivel cada día";
     return render();
+  }
+  if (a === "install") {
+    if (!installEv) return;
+    installEv.prompt();
+    installEv.userChoice.finally(() => {
+      installEv = null;
+      render();
+    });
+    return;
   }
   if (a === "logout")
     return ask(
