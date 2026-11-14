@@ -909,16 +909,44 @@ V.logros = () => {
   ${levelCard()}
   <div class="card" style="margin-top:16px"><h3>Rangos</h3><div class="ladder">${RANKS.map((x) => `<div class="${l >= x[0] ? "on" : ""} ${x === r ? "cur" : ""}"><div style="font-size:24px">${x[2]}</div><b>${x[1]}</b><div class="sm mu">Nivel ${x[0]}+</div></div>`).join("")}</div></div>
   <div class="card" style="margin-top:16px"><h3>Insignias <span class="pill a">${got}/${BADGES.length}</span></h3><div class="grid g4">${BADGES.map((b) => `<div class="badge ${S.badges[b[0]] ? "on" : ""}"><div class="e">${b[1]}</div><b>${b[2]}</b><div class="sm mu">${b[3]}</div></div>`).join("")}</div></div>
-  <div class="card" style="margin-top:16px"><h3>Cómo ganar XP</h3>${earn.map((e) => `<div class="tx"><span class="t">${e[0]}</span><b class="acc num">${e[1]} XP</b></div>`).join("")}</div>`;
+  <div class="card" style="margin-top:16px"><h3>Cómo ganar XP</h3>${earn.map((e) => `<div class="tx"><span class="t">${e[0]}</span><b class="acc num">${e[1]} XP</b></div>`).join("")}</div>
+  <p class="sm mu" style="text-align:center;margin-top:20px">¿Estabas probando? <button class="link" data-a="fresh">Empezá de cero</button> y arrancá desde el nivel 1.</p>`;
 };
 
 let showExport = false;
+
+/* ---------- instalar como app (PWA) ---------- */
+let installEv = null;
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installEv = e;
+  if (view === "ajustes") render();
+});
+window.addEventListener("appinstalled", () => {
+  installEv = null;
+  toast("App instalada ✓");
+  render();
+});
+if ("serviceWorker" in navigator && location.protocol !== "file:")
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+function installHTML() {
+  if (isStandalone()) return `<p class="sm mu">✓ Ya la estás usando como app instalada.</p>`;
+  if (installEv)
+    return `<p class="sm mu">Agregala a tu pantalla de inicio y abrila como cualquier app, sin barra del navegador.</p><button class="btn" style="margin-top:12px" data-a="install">Instalar Ascenso</button>`;
+  if (isIOS())
+    return `<p class="sm mu">En iPhone: abrila en Safari, tocá el botón Compartir (el cuadrado con la flecha) y elegí <b style="color:var(--tx)">Agregar a inicio</b>.</p>`;
+  return `<p class="sm mu">En Android: abrí el menú de Chrome (⋮) y tocá <b style="color:var(--tx)">Instalar app</b> o <b style="color:var(--tx)">Agregar a pantalla principal</b>.</p>`;
+}
 V.ajustes = () => `<div class="top"><div><p>Personalizá tu app</p><h1>Ajustes</h1></div></div>
   <div class="grid g2" style="align-items:start">
   <div class="card"><h3>Perfil</h3><form data-f="prefs" class="list"><label class="sm mu">Tu nombre</label><input name="name" value="${esc(S.name)}" placeholder="¿Cómo te llamo?"><label class="sm mu" style="margin-top:6px">Presupuesto mensual de gastos ($)</label><input name="budget" type="number" min="0" value="${S.budget || ""}" placeholder="Ej: 600000"><button class="btn" style="margin-top:8px;align-self:flex-start">Guardar</button></form></div>
+  <div class="card"><h3>Instalar en el celu</h3>${installHTML()}</div>
   <div class="card"><h3>Tus datos</h3><p class="sm mu">${user ? '☁️ Sesión iniciada como <b style="color:var(--tx)">' + esc(user.email) + "</b>. Tus datos se sincronizan entre todos tus dispositivos." : "💾 Modo local: se guardan solo en este navegador. Configurá Firebase para tener cuentas y sincronización."}</p>
     ${user ? '<button class="btn g" style="margin-top:12px" data-a="logout">Cerrar sesión</button>' : ""}
     <div class="row wrap" style="margin-top:12px"><button class="btn g" data-a="export">Copia de seguridad</button><button class="btn d" data-a="reset">Borrar todo</button></div>
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--bd)"><b>Empezar de cero</b><p class="sm mu" style="margin-top:4px">Si estabas probando la app: borra tu XP, nivel, insignias y todo lo que registraste. Quedan tus hábitos, tus tarjetas, tu nombre y tu presupuesto.</p><button class="btn g" style="margin-top:10px" data-a="fresh">Empezar de cero</button></div>
     ${showExport ? `<textarea id="exp" style="margin-top:12px;font-size:12px;min-height:120px" readonly>${esc(JSON.stringify(S))}</textarea><button class="btn sm" style="margin-top:8px" data-a="copy">Copiar</button>` : ""}
     <form data-f="import" style="margin-top:16px"><label class="sm mu">Restaurar una copia (pegá el texto)</label><textarea name="j" style="margin-top:6px;min-height:70px;font-size:12px"></textarea><button class="btn g sm" style="margin-top:8px">Restaurar</button></form>
   </div></div>`;
@@ -1078,6 +1106,15 @@ document.addEventListener("click", (e) => {
     document.title = "Ascenso — Subí de nivel cada día";
     return render();
   }
+  if (a === "install") {
+    if (!installEv) return;
+    installEv.prompt();
+    installEv.userChoice.finally(() => {
+      installEv = null;
+      render();
+    });
+    return;
+  }
   if (a === "logout")
     return ask(
       "¿Cerrar sesión en este dispositivo?",
@@ -1101,6 +1138,18 @@ document.addEventListener("click", (e) => {
       );
     return;
   }
+  if (a === "fresh")
+    return ask(
+      "¿Empezar de cero? Se borran tu XP, insignias y registros. Tus hábitos y tarjetas quedan.",
+      () => {
+        S = { ...DEF(), name: S.name, budget: S.budget, habits: S.habits, cards: S.cards };
+        weekOff = 0;
+        commit();
+        toast("Listo, arrancás desde el nivel 1 🌱");
+        go("inicio");
+      },
+      "Empezar de cero",
+    );
   if (a === "reset")
     return ask(
       "¿Borrar todos tus datos? No se puede deshacer.",
