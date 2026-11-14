@@ -1102,3 +1102,46 @@ form.row > .btn {
     align-items: center;
   }
 }
+
+/* ---------- tarjetas de crédito ---------- */
+.cc {
+  background: var(--s2);
+  border-radius: 18px;
+  padding: 16px;
+  border-top: 3px solid var(--cc);
+}
+.ccdot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cc);
+}
+.ccdue {
+  width: 56px;
+  padding: 5px 6px;
+  text-align: center;
+  border-radius: 9px;
+}
+.ccrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--s1);
+}
+.ccrow b {
+  display: block;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+details summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.cch {
+  flex-wrap: wrap;
+}
